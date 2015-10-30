@@ -11,7 +11,7 @@
 
 \subtitle{Application Note}
 
-\title[Quaff: alignment to nanopore reads]{Quaff: overlap detection and reference genome alignment to nanopore reads}
+\title[Quaff: alignment to nanopore reads]{Quaff: nanopore read overlap detection and reference genome alignment}
 \author[Ian Holmes]{Ian Holmes$^{\text{\sfb 1}*}$}
 \address{$^{\text{\sf 1}}$Department of Bioengineering, University of California, Berkeley, 94703, USA.}
 
@@ -24,7 +24,7 @@
 \abstract{
   Nanopore sequencing generates abundant long reads with a relatively high error-rate,
   motivating the development of an error-tolerant read alignment tool that can be easily parallelized.
-  Quaff is an open source command-line tool for aligning long FASTQ-format reads to a FASTA reference genome using a conditional pair HMM (transducer) that also models quality scores.
+  Quaff is an open source command-line tool for aligning long FASTQ-format reads to a FASTA reference genome using a conditional pair HMM (transducer) that models context-dependent sequencing errors and quality scores.
   The software implements pre-filtering based on kmer-matching;
   parameter-fitting via unsupervised Baum-Welch training;
   read overlap detection;
@@ -60,7 +60,7 @@ Model parameters are saved in a JSON format, as are expected emission and transi
 
 To accelerate the dynamic programming (DP) algorithms, we use a strategy of pre-filtering by word-matching, as used by BLAST \citep{Altschul1990-bc} and DALIGNER \citep{Myers2014-em}. Specifically, the DP is constrained to fixed-size diagonal bands around a small number of seed diagonals that contain more than a certain threshold of matching k-mers between the sequences being aligned. These thresholds can be specified directly by the user; alternatively, Quaff can be configured to select the largest threshold that will fit either within a user-specified memory limit, or within available system memory.
 
-For additional speed, Quaff offers several multiprocessor modes to parallelize computations on large read datasets: {\bf (1)} It can utilize multi-core architectures on a single machine by distributing DP jobs over a thread pool. {\bf (2)} It can launch server jobs on remote machines, effectively increasing the size of the thread pool by using an existing cluster. These server jobs are long-running, and are controlled by the master node over sockets. If the Amazon Web Services (AWS) command-line tools are installed (and the user has an AWS account), Quaff can instantiate a temporary cluster on the AWS Elastic Compute Cloud (EC2), download and build itself on the temporarily created EC2 instances, and use them as servers for the duration of the run (automatically terminating the instances after the run). In order to distribute data to server nodes, Quaff can either transfer files using the {\tt rsync} command, or can alternatively use `buckets' of the AWS Simple Storage Service (S3). None of these parallel functions require any queueing or other cluster management software, except {\tt ssh}, {\tt rsync} and (in the case of EC2/S3) the AWS command-line tools. {\bf (3)} If a job queueing system (such as Portable Batch System or Sun Grid Engine) is installed, together with NFS, then Quaff can use this system to distribute the workload over the cluster.
+For additional speed, Quaff offers several multiprocessor modes to parallelize computations on large read datasets: {\bf (1)} It can utilize multi-core architectures on a single machine by distributing DP jobs over a thread pool. {\bf (2)} It can launch server jobs on remote machines, effectively increasing the size of the thread pool by using an existing cluster. These server jobs are long-running, and are controlled by the master node over sockets. If the Amazon Web Services (AWS) command-line tools are installed (and the user has an AWS account), Quaff can instantiate a temporary cluster on the AWS Elastic Compute Cloud (EC2), download and build itself on the temporarily created EC2 instances, and use them as servers for the duration of the run (automatically terminating the instances after the run). In order to distribute data to server nodes, Quaff can either transfer files using the {\tt rsync} command, or can alternatively use `buckets' of the AWS Simple Storage Service (S3). None of these parallel functions require any queueing or other cluster management software, except {\tt ssh}, {\tt rsync} and (in the case of EC2/S3) the AWS command-line tools. {\bf (3)} If a job queueing system (such as Portable Batch System or Sun Grid Engine) is installed, together with NFS, then Quaff can use these to distribute the workload over a cluster.
 
 Quaff shares some similarities with marginAlign \citep{Jain2015-by}, which is also a transducer-based aligner for Oxford Nanopore reads which can run on a cluster; the primary differences with the Quaff model are in the parallelization and pre-filtering options, the k-mer dependencies of model parameters, and the explicit modeling of quality scores. Quaff also shares some similarities with DALIGNER \citep{Myers2014-em}, in that it uses pre-filtering based on k-mer word matching to accelerate the DP.
 
