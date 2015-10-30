@@ -1,0 +1,96 @@
+\documentclass{bioinfo}
+\copyrightyear{2015} \pubyear{2015}
+
+\access{Advance Access Publication Date: Day Month Year}
+\appnotes{Application Note}
+
+\begin{document}
+\firstpage{1}
+
+\subtitle{Application Note}
+
+\title[Quaff: alignment to nanopore reads]{Quaff: overlap detection and reference genome alignment to nanopore reads}
+\author[Ian Holmes]{Ian Holmes$^{\text{\sfb 1}*}$}
+\address{$^{\text{\sf 1}}$Department of Bioengineering, University of California, Berkeley, 94703, USA.}
+
+\corresp{$^\ast$To whom correspondence should be addressed.}
+
+\history{Received on XXXXX } %; revised on XXXXX; accepted on XXXXX}
+
+\editor{Associate Editor: XXXXXXX}
+
+\abstract{
+  Nanopore sequencing generates high volume long reads with a relatively high error-rate,
+  motivating the development of an error-tolerant read alignment tool that can be easily parallelized.
+  Quaff is an open source command-line tool for aligning long FASTQ-format reads to a FASTA reference genome using a conditional pair HMM (transducer) that also models quality scores.
+  The software implements pre-filtering based on kmer-matching;
+  parameter-fitting via unsupervised Baum-Welch training;
+  read overlap detection;
+  and multithreaded, cluster- and cloud-based parallelization.
+}
+
+\maketitle
+
+\section{Introduction}
+
+Nanopore sequencing typically generates long, noisy reads: one recent study reported substitution and indel error rates around 5\%, and read lengths around 4kb \citep{Jain2015-by}. This entails different alignment strategies from short, accurate reads, where compressed data structures have proven highly useful for fast indexing of exact (or close-to-exact) matches \citep{Lindner2012-tx}. For longer, more error-prone reads, parameterization of the error model is of greater importance; indeed accuracy on individual datasets can often be improved by fitting a custom statistical model, rather than using a one-size-fits-all parameterization.
+
+Several signals can be exploited in the pursuit of improved alignment accuracy. For sequencing technologies such as Oxford Nanopore, where the raw signal is derived from a convolution of overlapping k-mers, gap and substitution rates may depend on recent sequence context. Our statistical model incorporates this signal directly by allowing the substitution and gap probabilities at any given position to depend on the last k nucleotides of the read sequence. (It would be a better reflection of reality to allow the weights to depend on the last k nucleotides of the reference sequence; however, since the reference is not directly observed in many applications, such as read-to-read alignment, this would increase the computational expense of those applications.)
+
+An additional, and under-exploited, signal is available in the case of FASTQ data which contains quality scores, as well as base-called nucleotides. According to the usual definition of FASTQ format, these ``Q-scores'' are nominally to be interpreted as PHRED scores \citep{Cock2010-bk}; i.e., the logarithm of the probability of error. Such an interpretation offers one way to incorporate Q-scores in a statistical analysis.  However, the distributions of Q-scores from different sequencing technologies and base-calling pipelines may be very different \citep{Utturkar2015-vh} and there can be no guarantee that the relationship between Q-score and actual observed error rate is consistent across such different regimes. Here we describe another way of using quality scores in sequence analysis, exploiting only the fact that there is a measurable (and quantifiable) difference in profile between quality scores that correctly align to a reference genome, and those that don't. As with the k-mer dependence of error rates, this can be modeled directly, to enhance alignment performance by giving the alignment program extra clues about which regions will align well.
+
+\begin{methods}
+\section{Methods}
+
+Pair Hidden Markov models (HMMs), along with transducers (their input-conditioned relatives), are well-suited to the problem of aligning noisy, long reads \citep{Durbin1998-ps}. The emission and transition parameters of an HMM can be learned in an unsupervised way (i.e. without user-supplied training alignments), using the Baum-Welch algorithm, a version of the Expectation Maximization (EM) algorithm. The expected emission and transition counts computed by EM are themselves relevant to some statistics of interest (for example, sequence coverage, percentage identity, or indel frequencies). Furthermore, HMMs (and transducers) are easily extended. Incorporating adjunct data into the HMM emissions (such as quality scores) is straightforward; and transducer theory allows the systematic derivation of elaborated alignment tasks (e.g. finding the overlap of two reads, hypothesizing that they were both derived from a single unknown reference) without the need to re-parameterize the elaborated model \citep{Westesson2012-zg}.
+
+It should be noted that the maximum-likelihood alignment, as returned by the Viterbi algorithm, is not necessarily the most accurate alignment obtainable with a given parameterization: the decision-theoretic ``optimal accuracy'' alignment is better \citep{Holmes1998-pr}. Nor indeed does the maximum-likelihood parameterization, as given by Baum-Welch, in general yield the most accurate Viterbi alignments of any parameterization \citep{Drasdo1998-hl}\citep{Frith2010-zj}. Nevertheless, Quaff implements Viterbi alignment (because it is around threefold faster than ``optimal accuracy'') and Baum-Welch training (because, to our knowledge, no unsupervised training algorithm yields more accurate parameterizations).
+
+Quaff's underlying transducer has a k-mer dependence of substitution and indel probabilities. Quality scores, modeled using a negative binomial distribution with emission-dependent parameters, are required for training, but are optional in alignment and overlap modes.
+
+The read-overlap algorithm is a variant of Viterbi that probabilistically sums degenerate paths through gap states (so that biologically unmeaningful permutations of the gap order are marginalized). The underlying pair HMM is a minimal (3-state) approximation to a larger (27-state) pair HMM derived using phylocomposer, which implements algorithms for combining transducers (specifically, the 27-state machine arises from the intersection of two reference-to-read transducers, composed with a single-state generative HMM for the common underlying reference). The 3-state approximation trades meticulous accuracy for pragmatic run times.
+
+Model parameters are saved in a JSON format, as are expected emission and transition counts (computed by the Forward-Backward algorithm); the latter can be used as pseudocounts during subsequent training runs (effectively specifying a Dirichlet prior distribution on parameters). Alignments can be output in a variety of formats, including Stockholm, gapped FASTA, and SAM.
+
+To accelerate the dynamic programming (DP) algorithms, we use a strategy of pre-filtering by word-matching, as used by BLAST \citep{Altschul1990-bc} and DALIGNER \citep{Myers2014-em}. Specifically, the DP is constrained to fixed-size diagonal bands around a small number of seed diagonals that contain more than a certain threshold of matching k-mers between the sequences being aligned. These thresholds can be specified directly by the user; alternatively, Quaff can be configured to select the largest threshold that will fit either within a user-specified memory limit, or within available system memory.
+
+For additional speed, Quaff offers several multiprocessor modes to parallelize computations on large read datasets: {\bf (1)} It can utilize multi-core architectures on a single machine by distributing DP jobs over a thread pool. {\bf (2)} It can launch server jobs on remote machines, effectively increasing the size of the thread pool by using an existing cluster. These server jobs are long-running, and are controlled by the master node over sockets. If the Amazon Web Services (AWS) command-line tools are installed (and the user has an AWS account), Quaff can instantiate a temporary cluster on the AWS Elastic Compute Cloud (EC2), download and build itself on the temporarily created EC2 instances, and use them as servers for the duration of the run (automatically terminating the instances after the run). In order to distribute data to server nodes, Quaff can either transfer files using the {\tt rsync} command, or can alternatively use `buckets' of the AWS Simple Storage Service (S3). None of these parallel functions require any queueing or other cluster management software, except {\tt ssh}, {\tt rsync} and (in the case of EC2/S3) the AWS command-line tools. {\bf (3)} If a job queueing system (such as Portable Batch System or Sun Grid Engine) is installed, together with NFS, then Quaff can use this system to distribute the workload over the cluster.
+
+Quaff shares some similarities with marginAlign \citep{Jain2015-by}, which is also a transducer-based aligner for Oxford Nanopore reads which can run on a cluster; the primary differences with the Quaff model are in the parallelization and pre-filtering options, the k-mer dependencies of model parameters, and the explicit modeling of quality scores. Quaff also shares some similarities with DALIGNER \citep{Myers2014-em}, in that it uses pre-filtering based on k-mer word matching to accelerate the DP.
+
+
+
+\end{methods}
+
+
+
+
+
+\section{Availability}
+
+Quaff is available at https://github.com/ihh/quaff under the Creative Commons Attribution 3.0 US license. It is written in C++11, and compiles on a POSIX system either with Clang (v.6.1.0) or gcc (v4.8.2). It requires the GNU Scientific Software library (libgsl), the ZLib compression library (libz), and (if compiling with gcc) the Boost library.
+
+
+
+
+\section*{Acknowledgements}
+
+Quaff includes code from Ivan Vashchaev (gason), Jeff Donahoo (PracticalSocket), Heng Li (kseq), Rafael Baptista (stacktrace), David Robert Nadeau (memsize), Ren\'{e} Nyffenegger (base64), Roger Pate (string escaping), Konrad Rudolph (index sort), and the StackOverflow community. The code to fit the negative binomial distribution uses exact solution of the log-likelihood maximum for the probability parameter followed by Brent's minimization to find the optimal dispersion parameter, following Stephen Crowley (2012, http://vixra.org/pdf/1211.0113v1.pdf).
+
+\section*{Funding}
+
+This work has been supported by NHGRI grant R01-HG004483.
+
+\bibliographystyle{natbib}
+%\bibliographystyle{bioinformatics}
+%\bibliographystyle{achemnat}
+%\bibliographystyle{plainnat}
+%\bibliographystyle{abbrv}
+%
+%\bibliographystyle{plain}
+%
+%\bibliography{Document}
+
+
+\bibliography{references}
+\end{document}
