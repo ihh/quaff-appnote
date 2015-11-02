@@ -22,13 +22,22 @@
 \editor{Associate Editor: XXXXXXX}
 
 \abstract{
+{\bf Motivation.}
   Nanopore sequencing generates abundant long reads with a relatively high error-rate,
   motivating the development of an error-tolerant read alignment tool that can be easily parallelized.
-  Quaff is an open source command-line tool for aligning long FASTQ-format reads to a FASTA reference genome using a conditional pair HMM (transducer) that models context-dependent sequencing errors and quality scores.
+{\bf Results.}
+  We have developed Quaff, an open source command-line tool for aligning long FASTQ-format reads to a FASTA reference genome using a conditional pair HMM (transducer) that models context-dependent sequencing errors and quality scores.
   The software implements pre-filtering based on kmer-matching;
   parameter-fitting via unsupervised Baum-Welch training;
   read overlap detection;
   and multithreaded, cluster- and cloud-based parallelization.
+{\bf Availability and Implementation.}
+Quaff is available at \url{https://github.com/ihh/quaff} under the Creative Commons Attribution 3.0 US license.
+It is written in C++11.
+{\bf Contact.}
+Ian Holmes {\tt ihholmes+quaff@gmail.com}.
+{\bf Supplementary Information.}
+None.
 }
 
 \maketitle
